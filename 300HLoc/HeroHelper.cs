@@ -12,21 +12,24 @@ namespace THHLoc
 
     class HeroHelper
     {
-        protected static string DecodeString(BinaryReader br, u32 size)
+        static Encoding chEnc = Encoding.GetEncoding("x-cp20936");
+
+        public static string DecodeString(BinaryReader br, u32 size)
         {
-            string str = "";
             byte[] b = br.ReadBytes((int)size);
 
             // NOTE: Treating encoding as Chinese Simplified (GB2312-80) 
             // https://msdn.microsoft.com/en-us/library/system.text.encoding%28v=vs.110%29.aspx
 
-            Encoding chEnc = Encoding.GetEncoding("x-cp20936");
-            str = chEnc.GetString(b);
-
-            return str;
+            return chEnc.GetString(b);
         }
 
-        protected static u32 UnpackSize(u8 packed, u8 hint)
+        public static byte[] EncodeString(string src)
+        {
+            return chEnc.GetBytes(src);
+        }
+
+        public static u32 UnpackSize(u8 packed, u8 hint)
         {
             u32 result = (u32)packed;
 
@@ -49,13 +52,13 @@ namespace THHLoc
             u8 fake_hint = 0;
 
             if (packed != PackSize(result, ref fake_hint)) throw new Exception("Failed to repack");
-            if (fake_hint != hint) throw new Exception("Failed to repack hint");
+            //if (fake_hint != hint) throw new Exception("Failed to repack hint");
 #endif
 
             return result;
         }
 
-        protected static u8 PackSize(u32 size, ref u8 hint)
+        public static u8 PackSize(u32 size, ref u8 hint)
         {
             u8 result = (u8)(size & 0xFF);
 
@@ -70,13 +73,13 @@ namespace THHLoc
             }
             else
             {
-                hint = 1;
+                hint = 0;
             }
 
             return result;
         }
 
-        protected static u32 GetTrueTotalSize(BinaryReader br, ref u32 len)
+        public static u32 GetTrueTotalSize(BinaryReader br, ref u32 len)
         {
             u32 size = 0;
 
@@ -113,7 +116,7 @@ namespace THHLoc
             return size;
         }
 
-        protected static u32 GetTrueValueSize(BinaryReader br)
+        public static u32 GetTrueValueSize(BinaryReader br)
         {
             u32 size = 0;
 

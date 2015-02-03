@@ -64,10 +64,49 @@ namespace THHLoc
 	        {
                 bool valid = true;
 
-                // todo: byte array for this?!
-                
-                // todo: encode name and value
-                // we can get flags and figure out things from here
+                byte[] name_enc = EncodeString(name);
+                byte[] value_enc = EncodeString(value);
+
+                u8 name_len = (u8)(name_enc.Length & 0xFF);
+
+                u32 total_len = 0; //  2; where did this come from..
+
+                total_len += 2; // name_enc length
+                total_len += name_len;
+
+                if (value_enc.Length > 0)
+                {
+                    total_len += 2; // wrong.
+                    total_len += (u32)value_enc.Length;
+                }
+
+                u8 hint = 0;
+                u8 size = PackSize(total_len, ref hint);
+
+                bw.Write((u8)0xa);
+                bw.Write(size);
+                if (hint != 0)
+                {
+                    bw.Write(hint);
+                }
+                bw.Write((u8)0xa);
+
+                bw.Write(name_len);
+                bw.Write(name_enc, 0, name_enc.Length);
+
+                size = PackSize((u32)value_enc.Length, ref hint);
+
+                if (value_enc.Length > 0)
+                {
+                    bw.Write((u8)0x12);
+                    bw.Write(size);
+                    if (hint != 0)
+                    {
+                        bw.Write(hint);
+                    }
+
+                    bw.Write(value_enc, 0, value_enc.Length);
+                }
         	
 		        return valid;
 	        }

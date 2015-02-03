@@ -66,6 +66,8 @@ namespace THHLoc
                     BinaryReader br = new BinaryReader(hndl);
                     r.ReadBinary(br);
                     hndl.Close();
+
+                    r.WriteBinary("test.dat");
                 }
             }
 
