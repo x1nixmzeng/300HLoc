@@ -59,53 +59,109 @@ namespace THHLoc
         		
 		        return valid;
 	        }
-        	
+
+            struct PackedSize
+            {
+                public u32 raw;
+                public u8 size;
+                public u8 hint;
+            }
+
+            static PackedSize PackSize(u32 size)
+            {
+                PackedSize ret = new PackedSize();
+                ret.raw = size;
+                ret.size = HeroHelper.PackSize(ret.raw, ref ret.hint);
+                return ret;
+            }
+
+            struct SizeInfo
+            {
+                public PackedSize name;
+                public PackedSize value;
+                public PackedSize total_length;
+            }
+
+            static SizeInfo GetSizeInfo(byte[] name, byte[] val)
+            {
+                SizeInfo info; // = new SizeInfo();
+
+                info.name = PackSize((u32)name.Length);
+                info.value = PackSize((u32)val.Length);
+
+                u32 total_len = 0;
+
+                // name:
+                // marker + size (+ hint if used)
+                total_len += 1 + 1 + info.name.raw;
+                if (info.name.hint != 0)
+                {
+                    total_len += 1;
+                }
+
+                // value:
+                // (marker + size (+ hint if used) if used)
+                if (info.value.raw > 0)
+                {
+                    total_len += 1 + 1 + info.value.raw;
+                    if (info.value.hint != 0)
+                    {
+                        total_len += 1;
+                    }
+                }
+
+                info.total_length = PackSize(total_len);
+
+                return info;
+            }
+
 	        public bool Write(BinaryWriter bw)
 	        {
+                // 0xa <total size> 0xa <name size> <name> 0x12 <value size> <value>
+                // sizes are encoded into 1 or 2 bytes
+
+                byte[] name_encoded = EncodeString(name);
+                byte[] value_encoded = EncodeString(value);
+
+                // sanity check as we only have 1 sample file
+                if( name_encoded.Length >= 0x7F )
+                {
+                    Console.WriteLine("-- unsupported name length! please send me this file --");
+                    return false;
+                }
+
                 bool valid = true;
 
-                byte[] name_enc = EncodeString(name);
-                byte[] value_enc = EncodeString(value);
+                SizeInfo sizes = GetSizeInfo(name_encoded, value_encoded);
 
-                u8 name_len = (u8)(name_enc.Length & 0xFF);
-
-                u32 total_len = 0; //  2; where did this come from..
-
-                total_len += 2; // name_enc length
-                total_len += name_len;
-
-                if (value_enc.Length > 0)
+                // total size
+                bw.Write((u8)0xa);
+                bw.Write(sizes.total_length.size);
+                if (sizes.total_length.hint != 0)
                 {
-                    total_len += 2; // wrong.
-                    total_len += (u32)value_enc.Length;
+                    bw.Write(sizes.total_length.hint);
                 }
 
-                u8 hint = 0;
-                u8 size = PackSize(total_len, ref hint);
-
+                // name
                 bw.Write((u8)0xa);
-                bw.Write(size);
-                if (hint != 0)
+                bw.Write(sizes.name.size);
+                if (sizes.name.hint!= 0)
                 {
-                    bw.Write(hint);
+                    bw.Write(sizes.name.hint);
                 }
-                bw.Write((u8)0xa);
+                bw.Write(name_encoded, 0, name_encoded.Length);
 
-                bw.Write(name_len);
-                bw.Write(name_enc, 0, name_enc.Length);
-
-                size = PackSize((u32)value_enc.Length, ref hint);
-
-                if (value_enc.Length > 0)
+                // value
+                if (sizes.value.raw > 0)
                 {
                     bw.Write((u8)0x12);
-                    bw.Write(size);
-                    if (hint != 0)
+                    bw.Write(sizes.value.size);
+                    if (sizes.value.hint!= 0)
                     {
-                        bw.Write(hint);
+                        bw.Write(sizes.value.hint);
                     }
 
-                    bw.Write(value_enc, 0, value_enc.Length);
+                    bw.Write(value_encoded, 0, value_encoded.Length);
                 }
         	
 		        return valid;

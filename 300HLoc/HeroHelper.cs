@@ -12,14 +12,16 @@ namespace THHLoc
 
     class HeroHelper
     {
-        static Encoding chEnc = Encoding.GetEncoding("x-cp20936");
+        // Treating encoding as Chinese Simplified (ISO-2022)
+
+        // See list of supported encodings:
+        // https://msdn.microsoft.com/en-us/library/system.text.encoding%28v=vs.110%29.aspx
+
+        static Encoding chEnc = Encoding.GetEncoding("x-cp50227");
 
         public static string DecodeString(BinaryReader br, u32 size)
         {
             byte[] b = br.ReadBytes((int)size);
-
-            // NOTE: Treating encoding as Chinese Simplified (GB2312-80) 
-            // https://msdn.microsoft.com/en-us/library/system.text.encoding%28v=vs.110%29.aspx
 
             return chEnc.GetString(b);
         }
@@ -39,6 +41,7 @@ namespace THHLoc
             }
             else if (hint > 1)
             {
+                // xxxx refactor this stuff:
                 if ((hint & 1) == 0)
                 {
                     result ^= 0x80;
@@ -47,20 +50,14 @@ namespace THHLoc
                 result |= (u32)(hint >> 1) << 8;
             }
 
-            // repack live data:
-#if DEBUG
-            u8 fake_hint = 0;
-
-            if (packed != PackSize(result, ref fake_hint)) throw new Exception("Failed to repack");
-            //if (fake_hint != hint) throw new Exception("Failed to repack hint");
-#endif
-
             return result;
         }
 
         public static u8 PackSize(u32 size, ref u8 hint)
         {
             u8 result = (u8)(size & 0xFF);
+
+            // xxxx refactor this function
 
             if (size > 0xFF)
             {
@@ -73,7 +70,14 @@ namespace THHLoc
             }
             else
             {
-                hint = 0;
+                if( (size&0x80) != 0 )
+                {
+                    hint = 1;
+                }
+                else
+                {
+                    hint = 0;
+                }
             }
 
             return result;
