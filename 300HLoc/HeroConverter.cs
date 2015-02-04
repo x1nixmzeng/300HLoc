@@ -103,7 +103,11 @@ namespace THHLoc
                         valid &= loc.WriteBinary(file2);
                     }
 
-                    if( !valid )
+                    if( valid )
+                    {
+                        Console.WriteLine("Success! Written out \"{0}\"", file2);
+                    }
+                    else
                     {
                         Console.WriteLine("Error: Failed to write \"{0}\"", file2);
                     }
