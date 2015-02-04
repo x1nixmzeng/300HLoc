@@ -168,11 +168,11 @@ namespace THHLoc
 	        }
         }
 
-        public class Reader
+        public class LocManager
         {
 	        List<Entry> localeDb;
-        	
-	        public Reader()
+
+            public LocManager()
 	        {
 		        localeDb = new List<Entry>();
 	        }
@@ -182,8 +182,11 @@ namespace THHLoc
             {
                 bool valid = true;
 
-                valid &= (localeDb.Count == 0);
-                if (valid)
+                localeDb.Clear();
+
+                valid &= File.Exists(file_name);
+
+                if( valid )
                 {
                     StreamReader src = new StreamReader(file_name);
 
@@ -208,25 +211,39 @@ namespace THHLoc
             }
 
             // Binary data used by game into database
-	        public bool ReadBinary(BinaryReader br)
+	        public bool ReadBinary(string file_name)
 	        {
 		        bool valid = true;
 
-		        while( valid && ( br.BaseStream.Position < br.BaseStream.Length ) )
-		        {
-                    Entry e = new Entry();
-			        valid = e.Read(br);
-        			
-			        if( valid )
-			        {
-				        localeDb.Add(e);
-			        }
-		        }
-        		
-		        if( !valid )
-		        {
-			        localeDb.Clear();
-		        }
+                localeDb.Clear();
+
+                valid &= File.Exists(file_name);
+
+                if (valid)
+                {
+                    Stream file_handle = File.OpenRead(file_name);
+                    BinaryReader br = new BinaryReader(file_handle);
+
+                    valid &= br.BaseStream.Length > 0;
+
+                    while (valid && (br.BaseStream.Position < br.BaseStream.Length))
+                    {
+                        Entry e = new Entry();
+                        valid = e.Read(br);
+
+                        if (valid)
+                        {
+                            localeDb.Add(e);
+                        }
+                    }
+
+                    if (!valid)
+                    {
+                        localeDb.Clear();
+                    }
+
+                    file_handle.Close();
+                }
         	
 		        return valid;
 	        }

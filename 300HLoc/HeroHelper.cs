@@ -19,16 +19,20 @@ namespace THHLoc
 
         static Encoding chEnc = Encoding.GetEncoding("x-cp50227");
 
+        static string SourceNewLineMarker = "<NEWLINE>";
+
         public static string DecodeString(BinaryReader br, u32 size)
         {
             byte[] b = br.ReadBytes((int)size);
 
-            return chEnc.GetString(b);
+            string str = chEnc.GetString(b);
+            return str.Replace("\n", SourceNewLineMarker);
         }
 
         public static byte[] EncodeString(string src)
         {
-            return chEnc.GetBytes(src);
+            string str = src.Replace(SourceNewLineMarker, "\n");
+            return chEnc.GetBytes(str);
         }
 
         public static u32 UnpackSize(u8 packed, u8 hint)

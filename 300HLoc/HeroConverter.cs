@@ -60,14 +60,18 @@ namespace THHLoc
                 valid &= File.Exists(srcFile);
                 if (valid)
                 {
-                    HeroLocale.Reader r = new HeroLocale.Reader();
+                    HeroLocale.LocManager loc = new HeroLocale.LocManager();
 
-                    Stream hndl = File.OpenRead(srcFile);
-                    BinaryReader br = new BinaryReader(hndl);
-                    r.ReadBinary(br);
-                    hndl.Close();
+                    string test_source = "dump.txt";
 
-                    r.WriteBinary("test.dat");
+                    // binary -> binary + source
+                    loc.ReadBinary(srcFile);
+                    loc.WriteBinary("dump.dat");
+                    loc.WriteSource(test_source);
+                    
+                    // source -> binary
+                    loc.ReadSource(test_source);
+                    loc.WriteBinary("dump2.dat");
                 }
             }
 
