@@ -118,20 +118,11 @@ namespace THHLoc
 	        public bool Write(BinaryWriter bw)
 	        {
                 // 0xa <total size> 0xa <name size> <name> 0x12 <value size> <value>
-                // sizes are encoded into 1 or 2 bytes
+                // sizes are encoded into 1 size byte, or 1 size byte and 1 hint byte
 
                 byte[] name_encoded = EncodeString(name);
                 byte[] value_encoded = EncodeString(value);
-
-                // sanity check as we only have 1 sample file
-                if( name_encoded.Length >= 0x7F )
-                {
-                    Console.WriteLine("-- unsupported name length! please send me this file --");
-                    return false;
-                }
-
-                bool valid = true;
-
+                
                 SizeInfo sizes = GetSizeInfo(name_encoded, value_encoded);
 
                 // total size
@@ -164,7 +155,7 @@ namespace THHLoc
                     bw.Write(value_encoded, 0, value_encoded.Length);
                 }
         	
-		        return valid;
+		        return true;
 	        }
         }
 
