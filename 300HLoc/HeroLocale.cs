@@ -13,160 +13,208 @@ namespace THHLoc
     {
         class Entry
         {
-	        public string name { get; private set; }
-	        public string value { get; private set; }
+            // wasteful. likely serialization - see the PREFIX_ bytes in HeroHelper
+            public string name { get; private set; }
+            public string value { get; private set; }
+            public u32 item_id { get; private set; }
 
-	        public Entry()
-	        {
-		        name = "";
-		        value = "";
-	        }
+            public Entry()
+            {
+                name = "";
+                value = "";
+                item_id = 0;
+            }
 
             public Entry(string _name, string _value)
             {
                 name = _name;
                 value = _value;
+                item_id = 0;
             }
-        	
-	        public bool Read(BinaryReader br)
-	        {
-		        bool valid = true;
 
-                u32 true_total_len = 0;
-                u32 total_size = GetTrueTotalSize(br, ref true_total_len);
-        		
-		        u8 name_len = br.ReadByte();
-		        name = DecodeString(br, name_len);
-        		
-                u32 rem_size = total_size - name_len - true_total_len;
-
-                if (rem_size > 0)
+            public Entry(string _name, string _value, u32 _item_id)
+            {
+                name = _name;
+                value = _value;
+                item_id = _item_id;
+            }
+            
+            public bool Read(BinaryReader br)
+            {
+                u8 prefix = br.ReadByte();
+                if(prefix != PREFIX_SIZE)
                 {
-                    u32 value_len = GetTrueValueSize(br);
-
-                    if (value_len > 0)
-                    {
-                        value = DecodeString(br, value_len);
-                    }
-                    else
-                    {
-                        valid = false;
-                    }
+                    return false;
                 }
 
-                // total bytes read is
-                // total_size + true_total_len
-        		
-		        return valid;
-	        }
+                EncodedInt encSize = new EncodedInt();
+                encSize.Read(br);
 
-            struct PackedSize
-            {
-                public u32 raw;
-                public u8 size;
-                public u8 hint;
-            }
+                u32 size_expected = encSize.Value;
+                u32 size_read = 0;
 
-            static PackedSize PackSize(u32 size)
-            {
-                PackedSize ret = new PackedSize();
-                ret.raw = size;
-                ret.size = HeroHelper.PackSize(ret.raw, ref ret.hint);
-                return ret;
-            }
+                bool reading_items = false;
+                prefix = br.ReadByte();
+                size_read++;
 
-            struct SizeInfo
-            {
-                public PackedSize name;
-                public PackedSize value;
-                public PackedSize total_length;
-            }
-
-            static SizeInfo GetSizeInfo(byte[] name, byte[] val)
-            {
-                SizeInfo info; // = new SizeInfo();
-
-                info.name = PackSize((u32)name.Length);
-                info.value = PackSize((u32)val.Length);
-
-                u32 total_len = 0;
-
-                // name:
-                // marker + size (+ hint if used)
-                total_len += 1 + 1 + info.name.raw;
-                if (info.name.hint != 0)
+                switch( prefix )
                 {
-                    total_len += 1;
+                    case PREFIX_ITEM_ID:
+                        reading_items = true;
+                        break;
+                    case PREFIX_CLIENT_KEY:
+                        break;
+                    default:
+                        return false;
                 }
 
-                // value:
-                // (marker + size (+ hint if used) if used)
-                if (info.value.raw > 0)
+                if( reading_items )
                 {
-                    total_len += 1 + 1 + info.value.raw;
-                    if (info.value.hint != 0)
+                    EncodedInt encId = new EncodedInt();
+                    encId.Read(br);
+                    item_id = encId.Value;
+                    size_read += encId.Length();
+
+                    if( size_read == size_expected )
                     {
-                        total_len += 1;
+                        return true;
+                    }
+
+                    prefix = br.ReadByte();
+                    size_read++;
+
+                    if( prefix != PREFIX_ITEM_NAME )
+                    {
+                        return false;
                     }
                 }
 
-                info.total_length = PackSize(total_len);
+                EncodedInt encName = new EncodedInt();
+                encName.Read(br);
 
-                return info;
+                name = DecodeString(br, encName.Value);
+                size_read += encName.Value + encName.Length();
+
+                if( size_read == size_expected )
+                {
+                    return true;
+                }
+
+                prefix = br.ReadByte();
+                size_read++;
+
+                if( reading_items )
+                {
+                    if( prefix != PREFIX_ITEM_VALUE )
+                    {
+                        return false;
+                    }
+                }
+                else if (prefix != PREFIX_CLIENT_VAL)
+                {
+                    return false;
+                }
+
+                EncodedInt encValue = new EncodedInt();
+                encValue.Read(br);
+                value = DecodeString(br, encValue.Value);
+
+                size_read += encValue.Value + encValue.Length(); ;
+
+                if( size_read != size_expected )
+                {
+                    return false;
+                }
+
+                return true;
             }
 
-	        public bool Write(BinaryWriter bw)
-	        {
-                // 0xa <total size> 0xa <name size> <name> 0x12 <value size> <value>
-                // sizes are encoded into 1 size byte, or 1 size byte and 1 hint byte
-
+            public bool Write(BinaryWriter bw)
+            {
                 byte[] name_encoded = EncodeString(name);
                 byte[] value_encoded = EncodeString(value);
+
+                EncodedInt encName = new EncodedInt((u32)name_encoded.Length);
+                EncodedInt encValue = new EncodedInt((u32)value_encoded.Length);
                 
-                SizeInfo sizes = GetSizeInfo(name_encoded, value_encoded);
+                u32 total_size = 0;
 
-                // total size
-                bw.Write((u8)0xa);
-                bw.Write(sizes.total_length.size);
-                if (sizes.total_length.hint != 0)
+                EncodedInt encItem = null;
+
+                if( item_id != 0 )
                 {
-                    bw.Write(sizes.total_length.hint);
+                    encItem = new EncodedInt(item_id);
+                    total_size += 1 + encItem.Length();
                 }
 
-                // name
-                bw.Write((u8)0xa);
-                bw.Write(sizes.name.size);
-                if (sizes.name.hint!= 0)
+                if( encName.Value > 0 )
                 {
-                    bw.Write(sizes.name.hint);
+                    total_size += 1 + encName.Length() + encName.Value;
                 }
-                bw.Write(name_encoded, 0, name_encoded.Length);
 
-                // value
-                if (sizes.value.raw > 0)
+                if (encValue.Value > 0)
                 {
-                    bw.Write((u8)0x12);
-                    bw.Write(sizes.value.size);
-                    if (sizes.value.hint!= 0)
+                    total_size += 1 + encValue.Length() + encValue.Value;
+                }
+
+                // write total size
+                EncodedInt encTotal = new EncodedInt(total_size);
+                bw.Write(PREFIX_SIZE);
+                encTotal.Write(bw);
+
+                if( encItem != null )
+                {
+                    // write item_id
+                    bw.Write(PREFIX_ITEM_ID);
+                    encItem.Write(bw);
+
+                    // write name
+                    if (encName.Value > 0)
                     {
-                        bw.Write(sizes.value.hint);
+                        bw.Write(PREFIX_ITEM_NAME);
+                        encName.Write(bw);
+                        bw.Write(name_encoded, 0, name_encoded.Length);
                     }
 
-                    bw.Write(value_encoded, 0, value_encoded.Length);
+                    // write value
+                    if (encValue.Value > 0)
+                    {
+                        bw.Write(PREFIX_ITEM_VALUE);
+                        encValue.Write(bw);
+                        bw.Write(value_encoded, 0, value_encoded.Length);
+                    }
                 }
-        	
-		        return true;
-	        }
+                else
+                {
+                    // write name
+                    if (encName.Value > 0)
+                    {
+                        bw.Write(PREFIX_CLIENT_KEY);
+                        encName.Write(bw);
+                        bw.Write(name_encoded, 0, name_encoded.Length);
+                    }
+
+                    // write value
+                    if (encValue.Value > 0)
+                    {
+                        bw.Write(PREFIX_CLIENT_VAL);
+                        encValue.Write(bw);
+                        bw.Write(value_encoded, 0, value_encoded.Length);
+                    }
+                }
+            
+                return true;
+            }
         }
 
         public class LocManager
         {
-	        List<Entry> localeDb;
+            List<Entry> localeDb;
 
             public LocManager()
-	        {
-		        localeDb = new List<Entry>();
-	        }
+            {
+                localeDb = new List<Entry>();
+            }
 
             // Text file with edits into database
             public bool ReadSource(string file_name)
@@ -181,9 +229,16 @@ namespace THHLoc
                 {
                     StreamReader src = new StreamReader(file_name);
 
+                    u32 item_id = 0;
                     string name;
                     while ((name = src.ReadLine()) != null)
                     {
+                        // horrible check that name is actually the item_id
+                        if( GetNumber(name, ref item_id) )
+                        {
+                            name = src.ReadLine();
+                        }
+
                         string value = src.ReadLine();
 
                         if (value == null)
@@ -192,7 +247,7 @@ namespace THHLoc
                             break;
                         }
 
-                        localeDb.Add(new Entry(name, value));
+                        localeDb.Add(new Entry(name, value, item_id));
                     }
 
                     src.Close();
@@ -202,9 +257,9 @@ namespace THHLoc
             }
 
             // Binary data used by game into database
-	        public bool ReadBinary(string file_name)
-	        {
-		        bool valid = true;
+            public bool ReadBinary(string file_name)
+            {
+                bool valid = true;
 
                 localeDb.Clear();
 
@@ -235,9 +290,9 @@ namespace THHLoc
 
                     file_handle.Close();
                 }
-        	
-		        return valid;
-	        }
+            
+                return valid;
+            }
 
             // Database as binary data for the game
             public bool WriteBinary(string file_name)
@@ -245,7 +300,7 @@ namespace THHLoc
                 bool valid = true;
 
                 valid &= (localeDb.Count > 0);
-                if( valid )
+                if (valid)
                 {
                     Stream file = File.Create(file_name);
 
@@ -272,12 +327,16 @@ namespace THHLoc
                 bool valid = true;
 
                 valid &= (localeDb.Count > 0);
-                if( valid )
+                if (valid)
                 {
                     StreamWriter dst = new StreamWriter(file_name);
 
                     foreach (Entry e in localeDb)
                     {
+                        if (e.item_id != 0)
+                        {
+                            dst.WriteLine(e.item_id);
+                        }
                         dst.WriteLine(e.name);
                         dst.WriteLine(e.value);
                     }

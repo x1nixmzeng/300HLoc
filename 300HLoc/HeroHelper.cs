@@ -35,120 +35,99 @@ namespace THHLoc
             return chEnc.GetBytes(str);
         }
 
-        public static u32 UnpackSize(u8 packed, u8 hint)
+        // based on http://andrewfwang.com/2013/01/15/7bitints/
+        public class EncodedInt
         {
-            u32 result = (u32)packed;
+            public u32 Value { get; private set; }
 
-            if (hint == 1)
+            public EncodedInt()
             {
-                result |= 0x80;
+                Value = 0;
             }
-            else if (hint > 1)
+
+            public EncodedInt(u32 val)
             {
-                // xxxx refactor this stuff:
-                if ((hint & 1) == 0)
+                Value = val;
+            }
+
+            public u32 Length()
+            {
+                u32 val = Value;
+                u32 len = 1;
+
+                while (val >= 0x80)
                 {
-                    result ^= 0x80;
+                    u8 b = (u8)(val | 0x80);
+                    val >>= 7;
+                    len++;
                 }
 
-                result |= (u32)(hint >> 1) << 8;
+                return len;
             }
 
-            return result;
-        }
-
-        public static u8 PackSize(u32 size, ref u8 hint)
-        {
-            u8 result = (u8)(size & 0xFF);
-
-            // xxxx refactor this function
-
-            if (size > 0xFF)
+            public void Write(BinaryWriter bw)
             {
-                hint = (u8)((size >> 7) & 0xF);
+                u32 val = Value;
 
-                if ((size & 0x80) == 0)
+                while (val >= 0x80)
                 {
-                    result ^= 0x80;
+                    u8 b = (u8)(val | 0x80);
+                    
+                    bw.Write(b);
+                    val >>= 7;
                 }
+
+                bw.Write((u8)(val & 0xFF));
             }
-            else
+
+            public void Read(BinaryReader br)
             {
-                if( (size&0x80) != 0 )
+                int val = 0;
+                int shift = 0;
+
+                while (shift < (5 * 7))
                 {
-                    hint = 1;
+                    u8 b = br.ReadByte();
+                    
+                    val |= ((b & 0x7F) << shift);
+                    shift += 7;
+
+                    if ((b & 0x80) == 0)
+                    {
+                        break;
+                    }
                 }
-                else
-                {
-                    hint = 0;
-                }
-            }
 
-            return result;
+                Value = (u32)val;
+            }
         }
 
-        public static u32 GetTrueTotalSize(BinaryReader br, ref u32 len)
+        public static bool GetNumber(string val, ref u32 result)
         {
-            u32 size = 0;
+            bool valid = true;
 
-            u8 prefix = br.ReadByte();
-
-#if DEBUG
-            if (prefix != 0xA) throw new Exception("Unsupported size prefix");
-#endif
-
-            u8 packed_size = br.ReadByte();
-            u8 possible_hint = br.ReadByte();
-
-            if (possible_hint < 0xa)
+            try
             {
-                u8 real_postfix = br.ReadByte();
-#if DEBUG
-                if (real_postfix != 0xA) throw new Exception("Unsupported size postfix");
-#endif
-                len = 3;
-
-                size = UnpackSize(packed_size, possible_hint);
+                result = 0;
+                result = Convert.ToUInt32(val);
             }
-            else
+            catch
             {
-#if DEBUG
-                if (possible_hint != 0xA) throw new Exception("Unsupported size postfix");
-#endif
-                len = 2;
-
-                // nothing to do
-                size = (u32)packed_size;
+                valid = false;
             }
 
-            return size;
+            return valid;
         }
 
-        public static u32 GetTrueValueSize(BinaryReader br)
-        {
-            u32 size = 0;
+        public const u8 PREFIX_SIZE = 0xA;
 
-            u8 prefix = br.ReadByte();
-#if DEBUG
-            if (prefix != 0x12) throw new Exception("Unsupported size prefix");
-#endif
+        // client
+        public const u8 PREFIX_CLIENT_KEY = 0xA;
+        public const u8 PREFIX_CLIENT_VAL = 0x12;
 
-            u8 packed_size = br.ReadByte();
-            u8 possible_hint = br.ReadByte(); // really need a single peek
-
-            if (possible_hint < 0xa)
-            {
-                size = UnpackSize(packed_size, possible_hint);
-            }
-            else
-            {
-                // Assuming this isn't a hint, so ignoring
-
-                br.BaseStream.Position -= 1;
-                size = (u32)packed_size;
-            }
-
-            return size;
-        }
+        // item_lan
+        public const u8 PREFIX_ITEM_ID = 0x8;
+        public const u8 PREFIX_ITEM_NAME = 0x12;
+        public const u8 PREFIX_ITEM_VALUE = 0x1A;
     }
 }
